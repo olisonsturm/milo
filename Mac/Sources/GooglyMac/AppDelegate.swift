@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
+        installEditingMenu()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = MenuIcon.make()
         statusItem.button?.toolTip = "Milo"
@@ -66,6 +67,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func refreshIcon() {
         statusItem.button?.appearsDisabled = false
+    }
+
+    /// Menu-bar apps also need a main menu for standard text-editing shortcuts.
+    private func installEditingMenu() {
+        let main = NSMenu()
+        let editItem = NSMenuItem(title: "Bearbeiten", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "Bearbeiten")
+        for (title, action, key) in [
+            ("Ausschneiden", #selector(NSText.cut(_:)), "x"),
+            ("Kopieren", #selector(NSText.copy(_:)), "c"),
+            ("Einfügen", #selector(NSText.paste(_:)), "v"),
+            ("Alles auswählen", #selector(NSText.selectAll(_:)), "a")
+        ] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = [.command]
+            edit.addItem(item)
+        }
+        editItem.submenu = edit
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     // MARK: Actions
@@ -211,9 +232,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let alert = NSAlert()
         alert.messageText = "OpenAI API Key"
         alert.informativeText = "Saved privately on this Mac (not in the project files). The phone only ever gets short-lived keys."
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        let entry = APIKeyEntryView()
+        let field = entry.field
         field.placeholderString = Keychain.get(.openai) == nil ? "sk-…" : "Key saved. Paste a new one to replace it."
-        alert.accessoryView = field
+        alert.accessoryView = entry
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
