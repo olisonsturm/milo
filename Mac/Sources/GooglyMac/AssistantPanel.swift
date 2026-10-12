@@ -31,6 +31,8 @@ private struct AssistantView: View {
     @State private var usage: Int?
     @State private var shareContext = false
     @State private var editingContext = false
+    @StateObject private var dictation = MacDictation()
+    @State private var dictationPrefix = ""
     @State private var configuration = LLMConfiguration.current
     @State private var task: Task<Void, Never>?
     private let accent = Color(red: 0.36, green: 0.33, blue: 0.85)
@@ -68,35 +70,8 @@ private struct AssistantView: View {
                     Button("Neuer Chat") { turns = []; usage = nil; error = nil }.disabled(busy || turns.isEmpty)
                 }
                 Divider()
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            if turns.isEmpty {
-                                VStack(alignment: .leading, spacing: 16) {
-                                    Image(systemName: mode.symbol).font(.system(size: 42)).foregroundStyle(accent)
-                                    Text(mode == .excel ? "Von Daten zu einer klaren Entscheidung." : "Was beschäftigt dich gerade?").font(.title.bold())
-                                    Text(mode == .excel ? "Wir entwickeln Kennzahlen, Formeln, Diagramme und ein sauberes Layout. Der erste Schritt: Ziel und Daten verstehen." : "Teile eine Frage, eine Notiz oder eine Projektidee. Milo hilft dir, den nächsten Schritt zu finden.").foregroundStyle(.secondary)
-                                    Button("Damit starten") { draft = mode.starter }
-                                    Button("Excel-Beispiel ansehen · ohne API") { showPreview() }
-                                }.padding(.vertical, 32)
-                            }
-                            ForEach(turns) { turn in
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(turn.role == "user" ? "DU" : "MILO").font(.caption.bold()).foregroundStyle(accent)
-                                    Text(turn.text).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                                    if turn.role == "assistant" {
-                                        HStack {
-                                            Button("Kopieren") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(turn.text, forType: .string) }
-                                            Button("Als Notiz speichern…") { export(turn.text) }
-                                        }.font(.caption)
-                                    }
-                                }.padding(16).background(turn.role == "user" ? accent.opacity(0.07) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12)).id(turn.id)
-                            }
-                            if busy { ProgressView("Milo denkt…").id("busy") }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.onChange(of: turns.count) { _, _ in if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) } }
-                }
-                if let error { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+                conversation
+                if let problem = error ?? dictation.error { Text(problem).foregroundStyle(.red).textSelection(.enabled) }
                 VStack(alignment: .leading, spacing: 8) {
                     TextEditor(text: $draft).font(.body).frame(height: 76).padding(8)
                         .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
@@ -105,6 +80,10 @@ private struct AssistantView: View {
                         Text(usage.map { "Letzte Anfrage: \($0) Tokens" } ?? "\(configuration.model) · max. 1.200 Ausgabe-Tokens")
                             .font(.caption).foregroundStyle(.secondary)
                         Spacer()
+                        Button(dictation.recording ? "Aufnahme stoppen" : "Diktieren") {
+                            if !dictation.recording && !dictation.starting { dictationPrefix = draft }
+                            dictation.toggle()
+                        }.disabled(busy || dictation.starting)
                         if busy { Button("Abbrechen") { task?.cancel() } }
                         Button("Senden") { send() }.buttonStyle(.borderedProminent).tint(accent)
                             .disabled(busy || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -112,6 +91,10 @@ private struct AssistantView: View {
                 }
             }.padding(24)
         }
+        .onChange(of: dictation.transcript) { _, value in
+            draft = String((dictationPrefix + (dictationPrefix.isEmpty ? "" : "\n") + value).prefix(AssistantCore.messageLimit))
+        }
+        .onDisappear { dictation.stop() }
         .onReceive(NotificationCenter.default.publisher(for: .miloLLMChanged)) { _ in configuration = .current; usage = nil }
         .sheet(isPresented: $editingContext) {
             VStack(alignment: .leading, spacing: 16) {
@@ -129,9 +112,41 @@ private struct AssistantView: View {
         }
     }
 
+    private var conversation: some View {
+        ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            if turns.isEmpty {
+                                VStack(alignment: .leading, spacing: 16) {
+                                    Image(systemName: mode.symbol).font(.system(size: 42)).foregroundStyle(accent)
+                                    Text(mode == .excel ? "Von Daten zu einer klaren Entscheidung." : "Was beschäftigt dich gerade?").font(.title.bold())
+                                    Text(mode == .excel ? "Wir entwickeln Kennzahlen, Formeln, Diagramme und ein sauberes Layout. Der erste Schritt: Ziel und Daten verstehen." : "Teile eine Frage, eine Notiz oder eine Projektidee. Milo hilft dir, den nächsten Schritt zu finden.").foregroundStyle(.secondary)
+                                    Button("Damit starten") { draft = mode.starter }
+                                    Button("Excel-Beispiel ansehen · ohne API") { showPreview() }
+                                }.padding(.vertical, 32)
+                            }
+                            ForEach(turns) { turn in
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(turn.role == "user" ? "DU" : "MILO").font(.caption.bold()).foregroundStyle(accent)
+                                    MarkdownAnswer(text: turn.text)
+                                    if turn.role == "assistant" {
+                                        HStack {
+                                            Button("Kopieren") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(turn.text, forType: .string); MiloTaskCapture.shared.ignoreCurrentClipboard() }
+                                            Button("Als Notiz speichern…") { export(turn.text) }
+                                        }.font(.caption)
+                                    }
+                                }.padding(16).background(turn.role == "user" ? accent.opacity(0.07) : Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 12)).id(turn.id)
+                            }
+                            if busy { ProgressView("Milo denkt…").id("busy") }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.onChange(of: turns.count) { _, _ in if let last = turns.last { proxy.scrollTo(last.id, anchor: .bottom) } }
+                }
+    }
+
     private func send() {
         let question = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !busy, !question.isEmpty else { return }
+        dictation.stop()
         let pending = AssistantTurn(role: "user", text: question)
         turns.append(pending); draft = ""; busy = true; error = nil
         let selectedMode = mode

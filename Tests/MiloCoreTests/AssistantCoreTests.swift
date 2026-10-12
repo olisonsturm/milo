@@ -7,6 +7,7 @@ final class AssistantCoreTests: XCTestCase {
         let request = try AssistantCore.request(mode: .excel, context: "my notes", turns: [AssistantTurn(role: "user", text: "hello")], configuration: config, key: "test-placeholder")
         XCTAssertEqual(request.url?.absoluteString, "http://localhost:6655/anthropic/v1/messages")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-placeholder")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "test-placeholder")
         XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
         XCTAssertEqual(body["model"] as? String, "claude-sonnet-4-6")

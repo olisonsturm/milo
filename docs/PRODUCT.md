@@ -6,7 +6,7 @@ Ein persönlicher Assistent, der aus einer Frage, einer Notiz oder einer Tabelle
 
 ## Jetzt umgesetzt
 
-Standalone-Mac-Chat, manuell gepflegter persönlicher Kontext, Projekt-/Alltagsmodus, Excel-Blueprints, Kopieren und Markdown-Export. Begrenzte Requests und keine Hintergrund-Modellschleife. Der ursprüngliche iPhone-Begleiter bleibt optional.
+Standalone-Mac-Chat mit Markdown-Darstellung und lokaler deutscher Spracheingabe, manuell gepflegter Kontext, Excel-Blueprints und Markdown-Export. Copy-for-Milo als macOS-Dienst, optional erkannte Kopiervorgänge und ein kleiner Excel-Begleiter mit Zeigen-/Aktionsmodus. Begrenzte Requests und keine Hintergrund-Modellschleife. Der ursprüngliche iPhone-Begleiter bleibt optional.
 
 ## Nächster vertikaler Prototyp
 
@@ -17,7 +17,7 @@ Standalone-Mac-Chat, manuell gepflegter persönlicher Kontext, Projekt-/Alltagsm
 
 ## Danach
 
-Mac-Push-to-talk, dann optionaler Kamera-Trigger. Aktivierung und Aufnahme sichtbar, lokale Erkennung soweit möglich, keine Dauerübertragung zum Modell. Handy-Mitteilungen brauchen plattformspezifische, ausdrücklich aktivierte Integrationen; beliebiger App-Zugriff ist kein vorhandenes Feature.
+Globale Push-to-talk-Taste zusätzlich zur Chat-Diktierfunktion, dann optionaler Kamera-Trigger. Aktivierung und Aufnahme sichtbar, lokale Erkennung soweit möglich, keine Dauerübertragung zum Modell. Handy-Mitteilungen brauchen plattformspezifische, ausdrücklich aktivierte Integrationen; beliebiger App-Zugriff ist kein vorhandenes Feature.
 
 Flutter kann später die gemeinsame Oberfläche für Mobil/Desktop liefern. Bildschirmaufnahme, Accessibility und native Office-Adapter bleiben Plattformmodule; der Swift-Unterbau lässt sich dafür nicht einfach unverändert in Flutter ausführen. Erst einen vollständigen Excel-Ablauf validieren, bevor die Oberfläche neu geschrieben wird.
 

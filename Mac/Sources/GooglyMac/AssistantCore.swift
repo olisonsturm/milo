@@ -118,7 +118,7 @@ enum AssistantCore {
     }
 
     static func request(mode: AssistantMode, context: String, turns: [AssistantTurn],
-                        configuration: LLMConfiguration, key: String?) throws -> URLRequest {
+                        configuration: LLMConfiguration, key: String?, instructions: String? = nil) throws -> URLRequest {
         guard !configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Failure.configuration }
         let endpoint = try configuration.endpoint()
         let local = ["localhost", "127.0.0.1", "[::1]", "::1"].contains(endpoint.host ?? "")
@@ -129,9 +129,11 @@ enum AssistantCore {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let key, !key.isEmpty {
             request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            if configuration.format == .claude { request.setValue(key, forHTTPHeaderField: "x-api-key") }
         }
         var body = requestBody(mode: mode, context: context, turns: turns)
         body["model"] = configuration.model
+        if let instructions { body["instructions"] = instructions }
         if configuration.format != .responses {
             let instructions = body["instructions"] as? String ?? ""
             let messages = body["input"] as? [[String: Any]] ?? []
@@ -179,8 +181,8 @@ enum AssistantCore {
     }
 
     static func ask(mode: AssistantMode, context: String, turns: [AssistantTurn], key: String?,
-                    configuration: LLMConfiguration = LLMConfiguration()) async throws -> Reply {
-        let request = try request(mode: mode, context: context, turns: turns, configuration: configuration, key: key)
+                    configuration: LLMConfiguration = LLMConfiguration(), instructions: String? = nil) async throws -> Reply {
+        let request = try request(mode: mode, context: context, turns: turns, configuration: configuration, key: key, instructions: instructions)
         let session = URLSession(configuration: .ephemeral, delegate: LLMRedirectPolicy(), delegateQueue: nil)
         defer { session.invalidateAndCancel() }
         let (data, response) = try await session.data(for: request)

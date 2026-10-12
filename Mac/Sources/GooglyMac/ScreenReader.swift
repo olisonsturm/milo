@@ -145,3 +145,33 @@ enum ScreenReader {
         return rep.representation(using: .jpeg, properties: [.compressionFactor: 0.72]) ?? Data()
     }
 }
+
+extension ScreenReader {
+    /// Excel coaching captures only Excel's front window, excluding other apps on the desktop.
+    static func snapshotExcel() async throws -> ScreenSnapshot {
+        guard let app = NSWorkspace.shared.frontmostApplication, app.bundleIdentifier == "com.microsoft.Excel" else {
+            throw ExcelCoach.CoachError.focus
+        }
+        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        let ordered = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        let ids = ordered.filter { ($0[kCGWindowOwnerPID as String] as? Int) == Int(app.processIdentifier) && ($0[kCGWindowLayer as String] as? Int) == 0 }
+            .compactMap { $0[kCGWindowNumber as String] as? UInt32 }
+        guard let window = ids.compactMap({ id in content.windows.first { $0.windowID == id && $0.frame.width > 200 && $0.frame.height > 120 } }).first else {
+            throw ScreenReaderError.noDisplay
+        }
+        let filter = SCContentFilter(desktopIndependentWindow: window)
+        let config = SCStreamConfiguration()
+        let scale = NSScreen.main?.backingScaleFactor ?? 2
+        config.width = Int(window.frame.width * scale); config.height = Int(window.frame.height * scale)
+        config.showsCursor = false
+        let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+        let size = NSScreen.screens.first?.frame.size ?? window.frame.size
+        let local = try recognize(image, in: window.frame.size)
+        func shifted(_ target: Target) -> Target {
+            Target(id: target.id, text: target.text, rect: target.rect.offsetBy(dx: window.frame.minX, dy: window.frame.minY))
+        }
+        let lines = local.map { (line: shifted($0.line), words: $0.words.map(shifted)) }
+        let controls = ControlsReader.read(screen: size)
+        return ScreenSnapshot(jpeg: jpeg(image, maxEdge: 1100), lines: lines, size: size, app: app.localizedName, controls: controls.controls)
+    }
+}

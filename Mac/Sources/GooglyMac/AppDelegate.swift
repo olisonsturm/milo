@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
         installEditingMenu()
+        MiloTaskCapture.shared.start()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = MenuIcon.make()
         statusItem.button?.toolTip = "Milo"
@@ -26,7 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay.start()
         showDemoBubbleIfAsked()
         // Standalone chat does not need screen or Accessibility permissions.
-        assistantPanel.show()
+        if !UserDefaults.standard.bool(forKey: "milo.quietLaunch") { assistantPanel.show() }
         if let path = ProcessInfo.processInfo.environment["GOOGLY_DEMO_TRANSCRIBE"], let audio = FileManager.default.contents(atPath: path) {
             // Transcribes an audio file into a throwaway notes folder, prints the lines and quits.
             Task {
@@ -92,6 +93,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: Actions
 
     @objc private func openAssistant() { assistantPanel.show() }
+
+    @objc private func takeClipboardTask() { MiloTaskCapture.shared.useClipboard() }
+    @objc private func showExcelCoach() { ExcelCoach.shared.show() }
+    @objc private func toggleCopyWatch() { MiloTaskCapture.shared.watchesCopy.toggle() }
+    @objc private func toggleExcelAuto() { ExcelCoach.shared.automatic.toggle() }
+    @objc private func toggleQuietLaunch() {
+        let defaults = UserDefaults.standard
+        defaults.set(!defaults.bool(forKey: "milo.quietLaunch"), forKey: "milo.quietLaunch")
+    }
 
     @objc private func pointHere() {
         let m = NSEvent.mouseLocation
@@ -178,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func stopActions() {
+        ExcelCoach.shared.stop()
         host.stopActions()
     }
 
@@ -256,7 +267,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.removeAllItems()
 
         menu.addItem(item("Milo öffnen…", #selector(openAssistant)))
+        menu.addItem(item("Excel-Begleiter zeigen", #selector(showExcelCoach)))
+        menu.addItem(item("Kopierten Text als Excel-Aufgabe nutzen", #selector(takeClipboardTask)))
+        let watch = item("Normales Kopieren erkennen (Aufgabe vorschlagen)", #selector(toggleCopyWatch))
+        watch.state = MiloTaskCapture.shared.watchesCopy ? .on : .off
+        menu.addItem(watch)
+        let auto = item("Excel: automatisch bearbeiten", #selector(toggleExcelAuto))
+        auto.state = ExcelCoach.shared.automatic ? .on : .off
+        menu.addItem(auto)
+        let quiet = item("Im Hintergrund starten", #selector(toggleQuietLaunch))
+        quiet.state = UserDefaults.standard.bool(forKey: "milo.quietLaunch") ? .on : .off
+        menu.addItem(quiet)
+        menu.addItem(item("Excel-Arbeit stoppen", #selector(stopActions), key: "s"))
         menu.addItem(item("Bildschirmzugriff aktivieren…", #selector(enableScreenAccess)))
+        menu.addItem(item("Excel-Klicks erlauben (Bedienungshilfen)…", #selector(allowComputerControl)))
         menu.addItem(.separator())
         let phones = server.phoneNames
         let status = NSMenuItem(title: phones.isEmpty ? "Waiting for the phone app…" : "Phone connected: \(phones.joined(separator: ", "))",
