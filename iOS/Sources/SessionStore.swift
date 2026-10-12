@@ -65,7 +65,7 @@ struct BlueySession: Codable, Identifiable, Equatable {
             case .transcript: who = "Speaker \(entry.speaker ?? "?")"
             case .heard: who = "You"
             case .asked: who = "You asked"
-            case .reply: who = "Bluey"
+            case .reply: who = "Milo"
             case .report: who = "Research"
             }
             lines.append("[\(time.string(from: entry.time))] \(who): \(entry.text)")

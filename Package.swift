@@ -3,7 +3,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Googly",
+    name: "Milo",
     platforms: [.macOS(.v14)],
     products: [
         .executable(name: "GooglyMac", targets: ["GooglyMac"]),
@@ -15,5 +15,6 @@ let package = Package(
             dependencies: ["GooglyShared"],
             path: "Mac/Sources/GooglyMac"
         ),
+        .testTarget(name: "MiloCoreTests", dependencies: ["GooglyMac"], path: "Tests/MiloCoreTests"),
     ]
 )

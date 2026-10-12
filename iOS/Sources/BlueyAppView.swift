@@ -37,7 +37,7 @@ struct BlueyAppView: View {
                     MiniBluey()
                         .frame(width: 54, height: 48)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Bluey")
+                        Text("Milo")
                             .font(.fredoka(28))
                             .foregroundStyle(.white)
                         HStack(spacing: 6) {
@@ -242,7 +242,7 @@ struct SessionDetailView: View {
             return p
         } ?? "\(root)/ (the folder starting \(session.started.formatted(.iso8601.year().month().day())))"
         let prompt = """
-        I recorded a meeting with my Bluey app on \(session.started.formatted(date: .complete, time: .shortened)). \
+        I recorded a meeting with my Milo app on \(session.started.formatted(date: .complete, time: .shortened)). \
         The notes are on my Mac in \(path)
 
         - notes.md: the full transcript with timestamps and speaker labels (A, B, … per five-minute chunk), plus \

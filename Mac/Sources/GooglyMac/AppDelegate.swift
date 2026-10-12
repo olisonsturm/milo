@@ -9,13 +9,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let server = PhoneServer()
     private var statusItem: NSStatusItem!
     private lazy var host = RealtimeHost(overlay: overlay)
+    private let assistantPanel = AssistantPanel()
 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
+        installEditingMenu()
+        MiloTaskCapture.shared.start()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = MenuIcon.make()
-        statusItem.button?.toolTip = "Bluey"
+        statusItem.button?.toolTip = "Milo"
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -23,7 +26,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay.onFace = { [weak self] face in self?.server.send(face) }
         overlay.start()
         showDemoBubbleIfAsked()
-        checkPermissions()
+        // Standalone chat does not need screen or Accessibility permissions.
+        if !UserDefaults.standard.bool(forKey: "milo.quietLaunch") { assistantPanel.show() }
         if let path = ProcessInfo.processInfo.environment["GOOGLY_DEMO_TRANSCRIBE"], let audio = FileManager.default.contents(atPath: path) {
             // Transcribes an audio file into a throwaway notes folder, prints the lines and quits.
             Task {
@@ -57,16 +61,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌃⌥S stops him using the computer right away.
         HotKeys.shared.register(keyCode: kVK_ANSI_S) { [weak self] in self?.stopActions() }
 
-        if Keychain.get(.openai) == nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editKeys() }
+        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", LLMConfiguration.current.key == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editLLMSettings() }
         }
     }
 
     private func refreshIcon() {
-        statusItem.button?.appearsDisabled = server.phoneNames.isEmpty
+        statusItem.button?.appearsDisabled = false
+    }
+
+    /// Menu-bar apps also need a main menu for standard text-editing shortcuts.
+    private func installEditingMenu() {
+        let main = NSMenu()
+        let editItem = NSMenuItem(title: "Bearbeiten", action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: "Bearbeiten")
+        for (title, action, key) in [
+            ("Ausschneiden", #selector(NSText.cut(_:)), "x"),
+            ("Kopieren", #selector(NSText.copy(_:)), "c"),
+            ("Einfügen", #selector(NSText.paste(_:)), "v"),
+            ("Alles auswählen", #selector(NSText.selectAll(_:)), "a")
+        ] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.keyEquivalentModifierMask = [.command]
+            edit.addItem(item)
+        }
+        editItem.submenu = edit
+        main.addItem(editItem)
+        NSApp.mainMenu = main
     }
 
     // MARK: Actions
+
+    @objc private func openAssistant() { assistantPanel.show() }
+
+    @objc private func takeClipboardTask() { MiloTaskCapture.shared.useClipboard() }
+    @objc private func showExcelCoach() { ExcelCoach.shared.show() }
+    @objc private func toggleCopyWatch() { MiloTaskCapture.shared.watchesCopy.toggle() }
+    @objc private func toggleExcelAuto() { ExcelCoach.shared.automatic.toggle() }
+    @objc private func toggleQuietLaunch() {
+        let defaults = UserDefaults.standard
+        defaults.set(!defaults.bool(forKey: "milo.quietLaunch"), forKey: "milo.quietLaunch")
+    }
 
     @objc private func pointHere() {
         let m = NSEvent.mouseLocation
@@ -145,12 +180,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.fire()
     }
 
+    @objc private func enableScreenAccess() {
+        checkPermissions()
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+    }
+
+    @objc private func showPermissionStatus() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Milos macOS-Freigaben"
+        alert.informativeText = """
+        Laufende App: \(Bundle.main.bundlePath)
+
+        Bildschirm-Vorabcheck: \(CGPreflightScreenCaptureAccess() ? "freigegeben" : "nicht freigegeben; Weiter prüft die echte Aufnahme")
+        Bedienungshilfen: \(ComputerControl.isTrusted ? "freigegeben" : "nicht freigegeben")
+
+        Nach einer Freigabe Milo vollständig beenden und neu öffnen. Bei lokalen Entwicklungsupdates kann macOS die neue App erneut freigeben lassen. Prüfe den Eintrag für diese installierte App, nicht eine ältere Kopie im Projektordner.
+        """
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
     @objc private func openNotes() {
         try? FileManager.default.createDirectory(at: MeetingNotes.root, withIntermediateDirectories: true)
         NSWorkspace.shared.open(MeetingNotes.root)
     }
 
     @objc private func stopActions() {
+        ExcelCoach.shared.stop()
         host.stopActions()
     }
 
@@ -200,14 +257,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restartIfAwake()
     }
 
+    @objc private func editLLMSettings() { LLMSettingsEditor.show() }
+
     @objc private func editKeys() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         alert.messageText = "OpenAI API Key"
         alert.informativeText = "Saved privately on this Mac (not in the project files). The phone only ever gets short-lived keys."
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        let entry = APIKeyEntryView()
+        let field = entry.field
         field.placeholderString = Keychain.get(.openai) == nil ? "sk-…" : "Key saved. Paste a new one to replace it."
-        alert.accessoryView = field
+        alert.accessoryView = entry
         alert.addButton(withTitle: "Save")
         alert.addButton(withTitle: "Cancel")
         alert.window.initialFirstResponder = field
@@ -225,6 +285,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        menu.addItem(item("Milo öffnen…", #selector(openAssistant)))
+        menu.addItem(item("Excel-Begleiter zeigen", #selector(showExcelCoach)))
+        menu.addItem(item("Kopierten Text als Excel-Aufgabe nutzen", #selector(takeClipboardTask)))
+        let watch = item("Normales Kopieren erkennen (Aufgabe vorschlagen)", #selector(toggleCopyWatch))
+        watch.state = MiloTaskCapture.shared.watchesCopy ? .on : .off
+        menu.addItem(watch)
+        let auto = item("Excel: automatisch bearbeiten", #selector(toggleExcelAuto))
+        auto.state = ExcelCoach.shared.automatic ? .on : .off
+        menu.addItem(auto)
+        let quiet = item("Im Hintergrund starten", #selector(toggleQuietLaunch))
+        quiet.state = UserDefaults.standard.bool(forKey: "milo.quietLaunch") ? .on : .off
+        menu.addItem(quiet)
+        menu.addItem(item("Excel-Arbeit stoppen", #selector(stopActions), key: "s"))
+        menu.addItem(item("Bildschirmzugriff aktivieren…", #selector(enableScreenAccess)))
+        menu.addItem(item("Freigaben prüfen…", #selector(showPermissionStatus)))
+        menu.addItem(item("Excel-Klicks erlauben (Bedienungshilfen)…", #selector(allowComputerControl)))
+        menu.addItem(.separator())
         let phones = server.phoneNames
         let status = NSMenuItem(title: phones.isEmpty ? "Waiting for the phone app…" : "Phone connected: \(phones.joined(separator: ", "))",
                                 action: nil, keyEquivalent: "")
@@ -285,7 +362,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(item("Open Meeting Notes", #selector(openNotes)))
         menu.addItem(item("Personality…", #selector(editPersonality)))
-        menu.addItem(item("OpenAI Key…", #selector(editKeys)))
+        menu.addItem(item("LLM-Einstellungen…", #selector(editLLMSettings)))
+        menu.addItem(item("OpenAI Key (Handy/Recherche)…", #selector(editKeys)))
         menu.addItem(.separator())
 
         let trailMenu = NSMenu()
@@ -305,7 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(show)
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Bluey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Milo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     /// Menu item that shows its global shortcut (⌃⌥ + key) when given one.
