@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌃⌥S stops him using the computer right away.
         HotKeys.shared.register(keyCode: kVK_ANSI_S) { [weak self] in self?.stopActions() }
 
-        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", Keychain.get(.openai) == nil {
+        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", LLMConfiguration.current.isDirectOpenAI, Keychain.get(.openai) == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editKeys() }
         }
     }
@@ -227,6 +227,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         restartIfAwake()
     }
 
+    @objc private func editLLMSettings() { LLMSettingsEditor.show() }
+
     @objc private func editKeys() {
         NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
@@ -316,7 +318,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(item("Open Meeting Notes", #selector(openNotes)))
         menu.addItem(item("Personality…", #selector(editPersonality)))
-        menu.addItem(item("OpenAI Key…", #selector(editKeys)))
+        menu.addItem(item("LLM-Einstellungen…", #selector(editLLMSettings)))
+        menu.addItem(item("OpenAI Key (Handy/Recherche)…", #selector(editKeys)))
         menu.addItem(.separator())
 
         let trailMenu = NSMenu()

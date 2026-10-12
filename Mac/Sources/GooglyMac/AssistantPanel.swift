@@ -31,6 +31,7 @@ private struct AssistantView: View {
     @State private var usage: Int?
     @State private var shareContext = false
     @State private var editingContext = false
+    @State private var configuration = LLMConfiguration.current
     @State private var task: Task<Void, Never>?
     private let accent = Color(red: 0.36, green: 0.33, blue: 0.85)
 
@@ -49,9 +50,10 @@ private struct AssistantView: View {
                     }
                 }
                 Spacer()
+                Button("LLM-Einstellungen…") { LLMSettingsEditor.show() }.disabled(busy)
                 Button { editingContext = true } label: { Label("Mein Kontext", systemImage: "note.text") }
                 Toggle("Kontext mitsenden", isOn: $shareContext).toggleStyle(.checkbox)
-                Text("Nur aktiv geteilter Kontext wird mit deiner Frage an OpenAI gesendet. Kein automatisches Mitlesen.")
+                Text("Nur aktiv geteilter Kontext wird mit deiner Frage an den gewählten LLM-Dienst gesendet. Kein automatisches Mitlesen.")
                     .font(.caption).foregroundStyle(.secondary)
                 Text("Microsoft · Kamera · Flutter\nGeplant, noch nicht verbunden").font(.caption).foregroundStyle(.secondary)
             }.padding(24).frame(width: 230).background(accent.opacity(0.04))
@@ -100,7 +102,7 @@ private struct AssistantView: View {
                         .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 10))
                         .onChange(of: draft) { _, value in if value.count > AssistantCore.messageLimit { draft = String(value.prefix(AssistantCore.messageLimit)) } }
                     HStack {
-                        Text(usage.map { "Letzte Anfrage: \($0) Tokens" } ?? "gpt-4.1-mini · max. 1.200 Ausgabe-Tokens")
+                        Text(usage.map { "Letzte Anfrage: \($0) Tokens" } ?? "\(configuration.model) · max. 1.200 Ausgabe-Tokens")
                             .font(.caption).foregroundStyle(.secondary)
                         Spacer()
                         if busy { Button("Abbrechen") { task?.cancel() } }
@@ -110,10 +112,11 @@ private struct AssistantView: View {
                 }
             }.padding(24)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .miloLLMChanged)) { _ in configuration = .current; usage = nil }
         .sheet(isPresented: $editingContext) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Was Milo über dich wissen darf").font(.title2.bold())
-                Text("Notizen, Projekte und Arbeitsweise. Lokal gespeichert; nur mit aktiviertem „Kontext mitsenden“ an OpenAI übertragen. Maximal 6.000 Zeichen.").foregroundStyle(.secondary)
+                Text("Notizen, Projekte und Arbeitsweise. Lokal gespeichert; nur mit aktiviertem „Kontext mitsenden“ an den gewählten LLM-Dienst übertragen. Maximal 6.000 Zeichen.").foregroundStyle(.secondary)
                 TextEditor(text: $context).frame(minHeight: 260).font(.body)
                     .onChange(of: context) { _, value in if value.count > AssistantCore.contextLimit { context = String(value.prefix(AssistantCore.contextLimit)) } }
                 HStack {
@@ -134,11 +137,12 @@ private struct AssistantView: View {
         let selectedMode = mode
         let notes = shareContext ? context : ""
         let history = turns
-        let key = Keychain.get(.openai)
+        let config = configuration
+        let key = config.key
         task = Task { @MainActor in
             defer { busy = false; task = nil }
             do {
-                let reply = try await AssistantCore.ask(mode: selectedMode, context: notes, turns: history, key: key)
+                let reply = try await AssistantCore.ask(mode: selectedMode, context: notes, turns: history, key: key, configuration: config)
                 try Task.checkCancellation()
                 turns.append(AssistantTurn(role: "assistant", text: reply.text)); usage = reply.tokens
             } catch {

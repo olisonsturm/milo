@@ -76,14 +76,34 @@ enum AssistantCore {
 
     struct Reply { let text: String; let tokens: Int? }
     enum Failure: LocalizedError {
-        case noKey, http(Int), invalidReply
+        case noKey, http(Int), quota, rateLimit, unknown429, configuration, invalidReply
         var errorDescription: String? {
             switch self {
-            case .noKey: return "Bitte hinterlege im Menü einen OpenAI API-Key. Die Vorschau funktioniert ohne Key."
+            case .noKey: return "Bitte hinterlege unter LLM-Einstellungen einen API-Key. Die Vorschau funktioniert ohne Key."
+            case .http(401): return "Der LLM-Dienst lehnt den API-Key ab oder verlangt einen Key. Hinterlege den passenden Key unter LLM-Einstellungen."
+            case .http(404): return "API-Endpoint oder Modell nicht gefunden (HTTP 404). Prüfe Base URL, API-Format und Modellnamen."
             case .http(let code): return "Anfrage fehlgeschlagen (HTTP \(code)). Prüfe API-Key, API-Guthaben und Verbindung."
+            case .quota: return "Der LLM-Dienst meldet ein Guthaben-, Ausgaben- oder Nutzungslimit. Prüfe Guthaben und Limits beim Anbieter deines Keys. Erneutes Senden allein behebt das nicht."
+            case .rateLimit: return "Der LLM-Dienst meldet ein vorübergehendes Rate-Limit. Warte kurz und sende dann erneut. Bei wiederholten Fehlern prüfe die API-Limits."
+            case .unknown429: return "Der LLM-Dienst meldet HTTP 429 ohne erkennbaren Untertyp. Prüfe API-Guthaben und Limits; es kann auch ein vorübergehendes Rate-Limit sein."
+            case .configuration: return "Bitte eine gültige Base URL und einen Modellnamen eintragen. HTTP ist nur für lokale Proxys erlaubt; sonst HTTPS verwenden."
             case .invalidReply: return "Die API hat keine vollständige Textantwort geliefert. Bitte erneut versuchen."
             }
         }
+    }
+
+    /// Classify safe structured fields only; never display raw server messages or credentials.
+    static func failure(status: Int, data: Data) -> Failure {
+        guard status == 429 else { return .http(status) }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let error = json?["error"] as? [String: Any]
+        let codes = [error?["code"] as? String, error?["type"] as? String].compactMap { $0 }
+        let quotaCodes: Set<String> = ["insufficient_quota", "billing_hard_limit_reached", "billing_limit_exceeded",
+                                       "usage_limit_reached", "organization_usage_limit_exceeded",
+                                       "billing_not_active", "credit_balance_too_low", "credits_exhausted"]
+        if codes.contains(where: { quotaCodes.contains($0) }) { return .quota }
+        if codes.contains(where: { ["rate_limit_exceeded", "rate_limit_error", "slow_down"].contains($0) }) { return .rateLimit }
+        return .unknown429
     }
 
     static func parseReply(_ data: Data) throws -> Reply {
@@ -97,17 +117,75 @@ enum AssistantCore {
         return Reply(text: text, tokens: (json["usage"] as? [String: Any])?["total_tokens"] as? Int)
     }
 
-    static func ask(mode: AssistantMode, context: String, turns: [AssistantTurn], key: String?) async throws -> Reply {
-        guard let key, !key.isEmpty else { throw Failure.noKey }
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/responses")!)
+    static func request(mode: AssistantMode, context: String, turns: [AssistantTurn],
+                        configuration: LLMConfiguration, key: String?) throws -> URLRequest {
+        guard !configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw Failure.configuration }
+        let endpoint = try configuration.endpoint()
+        let local = ["localhost", "127.0.0.1", "[::1]", "::1"].contains(endpoint.host ?? "")
+        guard local || key?.isEmpty == false else { throw Failure.noKey }
+        var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 60
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody(mode: mode, context: context, turns: turns))
-        let (data, response) = try await URLSession.shared.data(for: request)
+        if let key, !key.isEmpty {
+            request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        }
+        var body = requestBody(mode: mode, context: context, turns: turns)
+        body["model"] = configuration.model
+        if configuration.format != .responses {
+            let instructions = body["instructions"] as? String ?? ""
+            let messages = body["input"] as? [[String: Any]] ?? []
+            body = ["model": configuration.model, "max_tokens": outputLimit, "stream": false]
+            if configuration.format == .claude {
+                request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+                body["system"] = instructions
+                // Claude requires a user turn first; combine consecutive roles.
+                var merged: [[String: Any]] = []
+                for message in messages {
+                    let role = message["role"] as? String ?? "user"
+                    let content = message["content"] as? String ?? ""
+                    if merged.isEmpty && role == "assistant" { continue }
+                    if merged.last?["role"] as? String == role {
+                        let old = merged.removeLast()["content"] as? String ?? ""
+                        merged.append(["role": role, "content": old + "\n\n" + content])
+                    } else { merged.append(message) }
+                }
+                body["messages"] = merged
+            } else {
+                body["messages"] = [["role": "system", "content": instructions]] + messages
+            }
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        return request
+    }
+
+    static func parseReply(_ data: Data, format: LLMFormat) throws -> Reply {
+        if format == .responses { return try parseReply(data) }
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw Failure.invalidReply }
+        let usage = json["usage"] as? [String: Any]
+        if format == .chat {
+            guard let choice = (json["choices"] as? [[String: Any]])?.first,
+                  choice["finish_reason"] as? String == "stop",
+                  let message = choice["message"] as? [String: Any],
+                  let text = message["content"] as? String, !text.isEmpty else { throw Failure.invalidReply }
+            return Reply(text: text, tokens: usage?["total_tokens"] as? Int)
+        }
+        guard ["end_turn", "stop_sequence"].contains(json["stop_reason"] as? String ?? "") else { throw Failure.invalidReply }
+        let text = (json["content"] as? [[String: Any]] ?? []).filter { $0["type"] as? String == "text" }
+            .compactMap { $0["text"] as? String }.joined(separator: "\n")
+        guard !text.isEmpty else { throw Failure.invalidReply }
+        let tokens = (usage?["input_tokens"] as? Int).flatMap { input in (usage?["output_tokens"] as? Int).map { input + $0 } }
+        return Reply(text: text, tokens: tokens)
+    }
+
+    static func ask(mode: AssistantMode, context: String, turns: [AssistantTurn], key: String?,
+                    configuration: LLMConfiguration = LLMConfiguration()) async throws -> Reply {
+        let request = try request(mode: mode, context: context, turns: turns, configuration: configuration, key: key)
+        let session = URLSession(configuration: .ephemeral, delegate: LLMRedirectPolicy(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+        let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 200 else { throw Failure.http(status) }
-        return try parseReply(data)
+        guard status == 200 else { throw failure(status: status, data: data) }
+        return try parseReply(data, format: configuration.format)
     }
 }

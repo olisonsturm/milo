@@ -2,6 +2,52 @@ import XCTest
 @testable import GooglyMac
 
 final class AssistantCoreTests: XCTestCase {
+    func testClaudeProxyRequestAndEndpoint() throws {
+        let config = LLMConfiguration(format: .claude, baseURL: "http://localhost:6655/anthropic/v1", model: "claude-sonnet-4-6")
+        let request = try AssistantCore.request(mode: .excel, context: "my notes", turns: [AssistantTurn(role: "user", text: "hello")], configuration: config, key: "test-placeholder")
+        XCTAssertEqual(request.url?.absoluteString, "http://localhost:6655/anthropic/v1/messages")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer test-placeholder")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: Any])
+        XCTAssertEqual(body["model"] as? String, "claude-sonnet-4-6")
+        XCTAssertEqual(body["max_tokens"] as? Int, 1200)
+        XCTAssertNil(body["input"])
+        XCTAssertEqual((body["messages"] as? [[String: Any]])?.count, 1)
+        XCTAssertFalse(config.isDirectOpenAI)
+    }
+
+    func testEndpointNormalizationAndInvalidURLs() throws {
+        for base in ["http://localhost:6655", "http://localhost:6655/v1/", "http://localhost:6655/v1/messages"] {
+            XCTAssertEqual(try LLMConfiguration(format: .claude, baseURL: base, model: "test").endpoint().absoluteString,
+                           "http://localhost:6655/v1/messages")
+        }
+        for base in ["http://remote.example", "https://user:password@example.com", "https://example.com?key=test", "garbage"] {
+            XCTAssertThrowsError(try LLMConfiguration(baseURL: base).endpoint())
+        }
+    }
+
+    func testClaudeAndChatReplyParsing() throws {
+        let claude = Data(#"{"stop_reason":"end_turn","content":[{"type":"text","text":"Hello"}],"usage":{"input_tokens":12,"output_tokens":8}}"#.utf8)
+        XCTAssertEqual(try AssistantCore.parseReply(claude, format: .claude).tokens, 20)
+        let chat = Data(#"{"choices":[{"finish_reason":"stop","message":{"content":"Hello"}}],"usage":{"total_tokens":20}}"#.utf8)
+        XCTAssertEqual(try AssistantCore.parseReply(chat, format: .chat).text, "Hello")
+        let truncated = Data(#"{"stop_reason":"max_tokens","content":[{"type":"text","text":"Partial"}]}"#.utf8)
+        XCTAssertThrowsError(try AssistantCore.parseReply(truncated, format: .claude))
+    }
+
+    func testQuotaTakesPrecedenceOverRateLimitType() {
+        let data = Data(#"{"error":{"code":"insufficient_quota","type":"rate_limit_error","message":"private details"}}"#.utf8)
+        guard case .quota = AssistantCore.failure(status: 429, data: data) else { return XCTFail("Expected quota") }
+        XCTAssertFalse(AssistantCore.failure(status: 429, data: data).localizedDescription.contains("private details"))
+    }
+
+    func testTemporaryAndUnknownRateLimits() {
+        let data = Data(#"{"error":{"type":"rate_limit_error","code":"slow_down"}}"#.utf8)
+        guard case .rateLimit = AssistantCore.failure(status: 429, data: data) else { return XCTFail("Expected temporary limit") }
+        guard case .unknown429 = AssistantCore.failure(status: 429, data: Data()) else { return XCTFail("Expected unknown 429") }
+        guard case .http(401) = AssistantCore.failure(status: 401, data: data) else { return XCTFail("Expected 401") }
+    }
+
     func testRequestLimitsAndNoServerStorage() throws {
         let turns = (0..<20).map { AssistantTurn(role: $0 % 2 == 0 ? "user" : "assistant", text: String(repeating: "x", count: 5000)) }
         let bounded = AssistantCore.boundedHistory(turns)

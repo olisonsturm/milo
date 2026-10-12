@@ -13,13 +13,26 @@ open build/Milo.app
 
 Der Mac-Chat öffnet sich beim Start; später über das Menüleisten-Symbol → **Milo öffnen…**. Kein iPhone nötig. Mit **Excel-Beispiel ansehen · ohne API** lässt sich die Oberfläche ohne Key und ohne Modellkosten testen. Diese Vorschau ist ein festes Beispiel.
 
-Für echte Antworten: **OpenAI Key…** im Menü öffnen und einen eigenen API-Key hinterlegen. ChatGPT-Abonnements ersetzen kein API-Guthaben. **Alltag**, **Excel-Dashboard** oder **Projekte** wählen, Frage eingeben und **Senden** drücken. Antworten lassen sich kopieren und als Markdown speichern. Eine laufende Anfrage kann abgebrochen werden; bereits entstandene API-Kosten werden dadurch nicht rückgängig gemacht.
+Für echte Antworten: **LLM-Einstellungen…** im Chat oder Menü öffnen und Base URL, API-Format, Modell und eigenen API-Key hinterlegen. OpenAI bleibt als Standard verfügbar. ChatGPT-Abonnements ersetzen kein API-Guthaben. **Alltag**, **Excel-Dashboard** oder **Projekte** wählen, Frage eingeben und **Senden** drücken. Antworten lassen sich kopieren und als Markdown speichern. Eine laufende Anfrage kann abgebrochen werden; bereits entstandene API-Kosten werden dadurch nicht rückgängig gemacht.
 
 Unter **Mein Kontext** kannst du Notizen/Projektinformationen schreiben oder eine UTF-8-Textdatei importieren. Import ersetzt den bisherigen Kontext und übernimmt maximal 6.000 Zeichen. Erst **Kontext mitsenden** aktivieren, um diese Informationen mit einer Frage zu teilen. Es gibt noch keine automatische Suche in Apple Notes, OneNote oder Projektordnern.
 
+## Claude über lokalen Hai-Proxy
+
+Unter **LLM-Einstellungen…** auf **Lokaler Claude-Proxy :6655** klicken:
+
+- API-Format: **Claude Messages**
+- Base URL: `http://localhost:6655/anthropic/v1`
+- Modell: `claude-sonnet-4-6` (oder ein anderes vom Proxy angebotenes Modell)
+- API-Key: der **Hai-Proxy-Key**, nicht der OpenAI-Key
+
+Milo sendet an `/anthropic/v1/messages` mit `Authorization: Bearer …` und `anthropic-version`. Der Dienst muss laufen. API-Keys werden pro Endpoint gespeichert und bei URL-Wechsel nicht automatisch übernommen. Das leere Key-Feld behält einen gespeicherten Key; zum Entfernen die Checkbox aktivieren. Lokale Proxys ohne Authentifizierung dürfen das Feld leer lassen; der Hai-Proxy verlangt einen Key.
+
+Alternativ sind vollständige Endpoint-URLs möglich. Root-URLs ergänzen `/v1` und den Pfad für das ausgewählte Format; vorhandene Pfade bleiben erhalten. HTTP ist nur für Loopback erlaubt, sonst HTTPS. Redirects werden nicht verfolgt. Der Handy-Sprach-/Recherchemodus nutzt weiterhin den separaten OpenAI-Key.
+
 ## Was der Prototyp kann
 
-- Standalone-Textchat am Mac mit OpenAI Responses API (`gpt-4.1-mini`).
+- Standalone-Textchat mit OpenAI Responses, OpenAI-kompatiblem Chat oder Claude Messages; Base URL und Modell frei konfigurierbar.
 - Lokaler, explizit geteilter persönlicher Kontext.
 - Excel-Bauanleitungen: Kennzahlen, Formeln, Datenprüfungen, Diagramme und Layout.
 - Fragen zur Projektplanung und zum Alltag; Antworten kopieren/exportieren.
@@ -32,7 +45,7 @@ Der Mac-Chat führt noch keine Aktionen aus und erzeugt keine `.xlsx`-Dateien. M
 
 Im Mac-Chat wird nur beim Senden eine Modellanfrage gestartet. Pro Anfrage maximal 6.000 Kontextzeichen, die letzten acht Nachrichten mit insgesamt maximal 12.000 Zeichen und bis zu 1.200 Ausgabe-Tokens. Jede Nachricht ist auf 4.000 Zeichen begrenzt. Zeichenlimits sind keine exakten Token- oder Geldlimits. Der sichtbare Chat bleibt bis zum Neustart erhalten; ältere Nachrichten außerhalb des Fensters werden nicht ans Modell geschickt.
 
-Der Mac-Chat verwendet `store: false`; das ist keine Garantie für Zero Data Retention beim Anbieter. Fragen, der begrenzte Verlauf und aktiv geteilter Kontext werden an OpenAI gesendet. Persönlicher Kontext bleibt in lokalen App-Einstellungen, Chatnachrichten bleiben im Arbeitsspeicher, exportierte Notizen am ausgewählten Ort.
+Der OpenAI-Responses-Modus verwendet `store: false`; das ist keine Garantie für Zero Data Retention beim Anbieter. Fragen, der begrenzte Verlauf und aktiv geteilter Kontext werden an den konfigurierten LLM-Dienst gesendet. Persönlicher Kontext bleibt in lokalen App-Einstellungen, Chatnachrichten bleiben im Arbeitsspeicher, exportierte Notizen am ausgewählten Ort.
 
 Die geerbte Schlüsselablage ist `~/Library/Application Support/Googly/keys.json`, mit Benutzer-Dateirechten, **nicht** die macOS-Keychain. Die internen Googly-Namen, das Bonjour-Protokoll und `~/Documents/Bluey Notes` bleiben für Kompatibilität bestehen. Das App-Bundle hat eine eigene Milo-ID.
 
@@ -50,7 +63,7 @@ Der optionale iPhone-Sprachmodus nutzt die geerbte Realtime-/Transkriptionspipel
 swift test
 ```
 
-Tests prüfen Anfragegrenzen, optionalen Kontext, API-Antwortparsing und fehlende Schlüssel ohne Netzwerkzugriff. Ein erfolgreicher Build bestätigt noch keinen echten Modellaufruf oder eine funktionierende iPhone-Verbindung.
+Tests prüfen Proxy-Endpunkte, Authentifizierung, Claude-/Chat-Antworten, Anfragegrenzen, optionalen Kontext, API-Antwortparsing und fehlende Schlüssel ohne Netzwerkzugriff. Ein erfolgreicher Build bestätigt noch keinen echten Modellaufruf oder eine funktionierende iPhone-Verbindung.
 
 Siehe [Produktplan](docs/PRODUCT.md) für die nächsten sinnvollen Schritte.
 

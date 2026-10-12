@@ -30,9 +30,15 @@ enum Keychain {
         return value
     }
 
-    static func set(_ key: Key, _ value: String?) {
+    static func getLLMKey(scope: String) -> String? { load()["llm:" + scope] }
+
+    static func setLLMKey(scope: String, value: String?) { save("llm:" + scope, value) }
+
+    static func set(_ key: Key, _ value: String?) { save(key.rawValue, value) }
+
+    private static func save(_ name: String, _ value: String?) {
         var all = load()
-        all[key.rawValue] = value?.isEmpty == false ? value : nil
+        all[name] = value?.isEmpty == false ? value : nil
         cache = all
         guard let data = try? JSONSerialization.data(withJSONObject: all, options: [.prettyPrinted, .sortedKeys]) else { return }
         FileManager.default.createFile(atPath: fileURL.path, contents: data, attributes: [.posixPermissions: 0o600])
