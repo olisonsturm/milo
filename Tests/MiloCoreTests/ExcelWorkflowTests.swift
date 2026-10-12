@@ -1,7 +1,17 @@
 import XCTest
+import ScreenCaptureKit
 @testable import GooglyMac
 
 final class ExcelWorkflowTests: XCTestCase {
+    func testCaptureErrorsExplainActualFailure() async {
+        await MainActor.run {
+            let denied = NSError(domain: SCStreamError.errorDomain, code: SCStreamError.userDeclined.rawValue)
+            XCTAssertTrue(ExcelCoach.describe(denied).contains("macOS verweigert"))
+            XCTAssertTrue(ExcelCoach.describe(denied).contains("~/Applications/Milo.app"))
+            let failed = NSError(domain: SCStreamError.errorDomain, code: -3811)
+            XCTAssertTrue(ExcelCoach.describe(failed).contains("-3811"))
+        }
+    }
     func testMarkdownBlocks() {
         let blocks = MarkdownBlocks.parse("# Titel\n\n**Fett** und `Formel`\n\n- Eins\n- Zwei\n\n```excel\n=SUM(A1:A3)\n```\n\n| KPI | Wert |\n| --- | --- |\n| Umsatz | 10 |")
         XCTAssertEqual(blocks.map(\.kind), [.heading, .paragraph, .paragraph, .code, .table])

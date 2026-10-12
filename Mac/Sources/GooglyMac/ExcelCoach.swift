@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import Combine
+import ScreenCaptureKit
 
 struct ExcelStep: Decodable {
     let action: String
@@ -94,9 +95,8 @@ final class ExcelCoach: ObservableObject {
     func next() {
         guard !busy, !assignment.isEmpty else { return }
         guard Self.excelIsFrontmost else { message = "Wechsle zu Microsoft Excel und klicke Weiter."; waitingForExcel = true; return }
-        guard CGPreflightScreenCaptureAccess() else { message = "Bitte Bildschirmzugriff im Milo-Menü aktivieren."; waitingForExcel = false; return }
         waitingForExcel = false
-        highlight.hide(); step = nil; busy = true
+        highlight.hide(); step = nil; busy = true; message = "Excel-Fenster wird gelesen…"
         let token = generation
         work = Task { @MainActor in
             var continueAfter = false
@@ -108,6 +108,7 @@ final class ExcelCoach: ObservableObject {
                 guard generation == token, Self.excelIsFrontmost,
                       NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return }
                 let config = LLMConfiguration.current
+                message = "Excel erkannt. Milo plant den nächsten Schritt…"
                 let prompt = "User assignment:\n\(String(assignment.prefix(2500)))\n\nPreviously completed steps:\n\(String(completed.suffix(6).joined(separator: "\n").prefix(1000)))"
                 let reply = try await AssistantCore.ask(mode: .excel, context: String(shot.targetList.prefix(AssistantCore.contextLimit)), turns: [AssistantTurn(role: "user", text: String(prompt.prefix(AssistantCore.messageLimit)))], key: config.key, configuration: config, instructions: Self.guide)
                 try Task.checkCancellation()
@@ -122,9 +123,21 @@ final class ExcelCoach: ObservableObject {
                     if generation == token { continueAfter = true }
                 }
             } catch {
-                if generation == token && !Task.isCancelled { message = error.localizedDescription; highlight.hide() }
+                if generation == token && !Task.isCancelled { message = Self.describe(error); highlight.hide() }
             }
         }
+    }
+
+    static func describe(_ error: Error) -> String {
+        let failure = error as NSError
+        if failure.domain == SCStreamError.errorDomain && failure.code == SCStreamError.userDeclined.rawValue {
+            return "macOS verweigert Milo die Bildschirmaufnahme. In Systemeinstellungen → Datenschutz & Sicherheit → Bildschirm- & Systemaudioaufnahme die App unter ~/Applications/Milo.app freigeben. Danach Milo beenden und neu öffnen; alte Einträge können zu einer anderen App-Kopie gehören."
+        }
+        if failure.domain == SCStreamError.errorDomain {
+            return "Excel-Aufnahme fehlgeschlagen (ScreenCaptureKit \(failure.code)). Milo neu starten und Weiter versuchen."
+        }
+        if error is ScreenReaderError { return "Kein sichtbares Excel-Fenster gefunden. Öffne das Arbeitsblatt und klicke Weiter." }
+        return error.localizedDescription
     }
 
     func executeCurrent() {

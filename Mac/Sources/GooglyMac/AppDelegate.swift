@@ -180,7 +180,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }.fire()
     }
 
-    @objc private func enableScreenAccess() { checkPermissions() }
+    @objc private func enableScreenAccess() {
+        checkPermissions()
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+    }
+
+    @objc private func showPermissionStatus() {
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Milos macOS-Freigaben"
+        alert.informativeText = """
+        Laufende App: \(Bundle.main.bundlePath)
+
+        Bildschirm-Vorabcheck: \(CGPreflightScreenCaptureAccess() ? "freigegeben" : "nicht freigegeben; Weiter prüft die echte Aufnahme")
+        Bedienungshilfen: \(ComputerControl.isTrusted ? "freigegeben" : "nicht freigegeben")
+
+        Nach einer Freigabe Milo vollständig beenden und neu öffnen. Bei lokalen Entwicklungsupdates kann macOS die neue App erneut freigeben lassen. Prüfe den Eintrag für diese installierte App, nicht eine ältere Kopie im Projektordner.
+        """
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
 
     @objc private func openNotes() {
         try? FileManager.default.createDirectory(at: MeetingNotes.root, withIntermediateDirectories: true)
@@ -280,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(quiet)
         menu.addItem(item("Excel-Arbeit stoppen", #selector(stopActions), key: "s"))
         menu.addItem(item("Bildschirmzugriff aktivieren…", #selector(enableScreenAccess)))
+        menu.addItem(item("Freigaben prüfen…", #selector(showPermissionStatus)))
         menu.addItem(item("Excel-Klicks erlauben (Bedienungshilfen)…", #selector(allowComputerControl)))
         menu.addItem(.separator())
         let phones = server.phoneNames
