@@ -43,7 +43,7 @@ final class Settings {
 
     /// Lets him click, type, press keys and open things when you ask.
     var computerControl: Bool {
-        get { defaults.object(forKey: "computerControl") as? Bool ?? true }
+        get { defaults.object(forKey: "computerControl") as? Bool ?? false }
         set { defaults.set(newValue, forKey: "computerControl"); onChange?() }
     }
 

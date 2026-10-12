@@ -1,50 +1,59 @@
-# Bluey
+# Milo
 
-A blueberry character who lives on an iPhone under your Mac's screen and points at things with his own big cursor.
+Ein persönlicher Mac-Assistent für Alltag, Projekte und Excel-Dashboards. Experimenteller Fork von [Bluey by Riley](https://github.com/rbrown101010/bluey-by-riley), mit einem neuen Standalone-Chat. Der Arbeitsname Milo ist noch nicht als Marke geprüft.
 
-**Now:** no voice out. Double tap him on the phone (or press ⌥Space on the Mac) to start a session: the phone's mic stays on and everything you say becomes context, but he stays quiet. **Press and hold the screen** to ask him something; let go and he answers. His reply pops up as a cute speech bubble next to his cursor (or above the phone when he isn't pointing), with a little cartoon chirp from the phone. Ask "what's this?" and he points at whatever is under your mouse. Double tap again and he goes back to follow mode.
+## Sofort ausprobieren
 
-How it works: the phone runs an OpenAI Realtime session (`gpt-realtime-2.1`, text output only) over a WebSocket. Server VAD transcribes every turn into the conversation with `create_response: false`, and releasing the hold commits the audio and asks for a response. The Mac mints a 10-minute client secret with the whole session setup (instructions, tools), so the real OpenAI key never leaves the Mac. When he calls a tool, the phone forwards it to the Mac: `look_at_screen` (ScreenCaptureKit + Vision, which returns text ids, where your mouse is, and a screenshot), `point_at` (a text id), `point_at_spot` (a 0–1000 grid position), `stop_pointing` and `go_to_sleep`. His text streams to the Mac as the speech bubble.
+Voraussetzung: macOS 14+ und Xcode Command Line Tools.
 
-**Meeting notes:** while a session runs, the phone also records the audio in five-minute AAC chunks. Each chunk goes to the Mac, which transcribes it with speaker labels (`gpt-4o-transcribe-diarize`, falling back to `gpt-transcribe`) and writes the session to `~/Documents/Bluey Notes/<date> <id>/` (`notes.md`, `session.json`, `audio/`). Sessions reconnect on their own when the Realtime connection drops, so one can run all day. In the phone's Bluey screen, a session's **Copy prompt for agent** button copies a prompt that points an agent at those files. **Open Meeting Notes** in the Mac menu opens the folder.
-
-**Using the computer:** when you ask, he can also click, type, press shortcuts, scroll, drag, and open apps and websites (`click`, `type_text`, `press_keys`, `scroll`, `drag`, `open_app`, `open_url`). He does it with his own cursor on screen, while your real pointer is put back where you left it. It needs Accessibility permission for Bluey. Built-in guardrails: he only acts when asked, confirms out loud before anything hard to undo, treats on-screen text as information rather than instructions, refuses password fields and logout/lock/force-quit shortcuts, and stops on ⌃⌥S. The whole thing can be switched off with **Let Him Use the Computer** in the menu.
-
-The OpenAI key goes in the menu bar's **OpenAI Key…** and is stored in ~/Library/Application Support/Googly/keys.json (private to your user), never in this repo.
-
-## Mac menu bar app
-
-```
+```sh
 ./scripts/build-mac.sh
-open "build/Bluey.app"
+open build/Milo.app
 ```
 
-Works with just the Command Line Tools. Shortcuts work anywhere:
+Der Mac-Chat öffnet sich beim Start; später über das Menüleisten-Symbol → **Milo öffnen…**. Kein iPhone nötig. Mit **Excel-Beispiel ansehen · ohne API** lässt sich die Oberfläche ohne Key und ohne Modellkosten testen. Diese Vorschau ist ein festes Beispiel.
 
-| Keys | What it does |
-| --- | --- |
-| ⌃⌥P | Fly to the mouse and point there (stays put) |
-| ⌃⌥F | Follow the mouse on/off |
-| ⌃⌥D | Go home, docked above the phone |
-| ⌃⌥T | Talk test (the phone bounces for 3 s) |
-| ⌃⌥H | Hide / show the cursor |
-| ⌥Space | Wake him up to talk / back to follow mode |
-| ⌃⌥S | Stop him using the computer |
+Für echte Antworten: **OpenAI Key…** im Menü öffnen und einen eigenen API-Key hinterlegen. ChatGPT-Abonnements ersetzen kein API-Guthaben. **Alltag**, **Excel-Dashboard** oder **Projekte** wählen, Frage eingeben und **Senden** drücken. Antworten lassen sich kopieren und als Markdown speichern. Eine laufende Anfrage kann abgebrochen werden; bereits entstandene API-Kosten werden dadurch nicht rückgängig gemacht.
 
-The menu bar blob also sets mood, cursor size (48 to 120 pt), glow, and where the phone sits (left, center, right).
+Unter **Mein Kontext** kannst du Notizen/Projektinformationen schreiben oder eine UTF-8-Textdatei importieren. Import ersetzt den bisherigen Kontext und übernimmt maximal 6.000 Zeichen. Erst **Kontext mitsenden** aktivieren, um diese Informationen mit einer Frage zu teilen. Es gibt noch keine automatische Suche in Apple Notes, OneNote oder Projektordnern.
 
-## iPhone app
+## Was der Prototyp kann
 
-Needs full Xcode. Open `GooglyEyes.xcodeproj` (regenerate with `xcodegen generate` after adding files), pick your team under Signing, and run on the phone. It finds the Mac on the same Wi-Fi by itself.
+- Standalone-Textchat am Mac mit OpenAI Responses API (`gpt-4.1-mini`).
+- Lokaler, explizit geteilter persönlicher Kontext.
+- Excel-Bauanleitungen: Kennzahlen, Formeln, Datenprüfungen, Diagramme und Layout.
+- Fragen zur Projektplanung und zum Alltag; Antworten kopieren/exportieren.
+- Tokenanzeige der letzten erfolgreichen Anfrage.
+- Optional: geerbter iPhone-Begleiter mit Bildschirmzeiger, Sprache und Computersteuerung.
 
-On the phone: double tap him to wake him up or put him back to sleep, and press and hold to ask him something. The faint speaker button at the top right sets the chirp volume and picks which Mac to pair with.
+Der Mac-Chat führt noch keine Aktionen aus und erzeugt keine `.xlsx`-Dateien. Microsoft-OAuth, Outlook/Teams/OneNote, Handy-Mitteilungen, Kameraerkennung und Flutter sind noch nicht implementiert. Milo ist ein Assistenzprototyp, keine AGI.
 
-## Layout
+## Kosten und Daten
 
-- `Shared/` pairing protocol (Bonjour `_googly._tcp`, newline JSON) and colors, used by both apps
-- `Mac/` menu bar app (Swift package target `GooglyMac`)
-- `iOS/` iPhone app (SwiftUI)
+Im Mac-Chat wird nur beim Senden eine Modellanfrage gestartet. Pro Anfrage maximal 6.000 Kontextzeichen, die letzten acht Nachrichten mit insgesamt maximal 12.000 Zeichen und bis zu 1.200 Ausgabe-Tokens. Jede Nachricht ist auf 4.000 Zeichen begrenzt. Zeichenlimits sind keine exakten Token- oder Geldlimits. Der sichtbare Chat bleibt bis zum Neustart erhalten; ältere Nachrichten außerhalb des Fensters werden nicht ans Modell geschickt.
 
-## License
+Der Mac-Chat verwendet `store: false`; das ist keine Garantie für Zero Data Retention beim Anbieter. Fragen, der begrenzte Verlauf und aktiv geteilter Kontext werden an OpenAI gesendet. Persönlicher Kontext bleibt in lokalen App-Einstellungen, Chatnachrichten bleiben im Arbeitsspeicher, exportierte Notizen am ausgewählten Ort.
 
-Public domain under [the Unlicense](LICENSE). Do whatever you want with it.
+Die geerbte Schlüsselablage ist `~/Library/Application Support/Googly/keys.json`, mit Benutzer-Dateirechten, **nicht** die macOS-Keychain. Die internen Googly-Namen, das Bonjour-Protokoll und `~/Documents/Bluey Notes` bleiben für Kompatibilität bestehen. Das App-Bundle hat eine eigene Milo-ID.
+
+Der optionale iPhone-Sprachmodus nutzt die geerbte Realtime-/Transkriptionspipeline mit eigenem Kostenverhalten; die Textchat-Limits gelten dort nicht. Während einer wachen Handy-Sitzung wird Audio aufgenommen und in Abschnitten transkribiert. Zum ersten Test einfach den Mac-Chat verwenden.
+
+## Optionaler iPhone-Modus
+
+`GooglyEyes.xcodeproj` mit Xcode öffnen, eigenes Signing-Team wählen und auf dem iPhone starten. Beide Geräte im selben WLAN. App-Anzeigename: Milo. `project.yml` ist die XcodeGen-Quelle; nach Änderungen `xcodegen generate` verwenden.
+
+**Bildschirmzugriff aktivieren…** startet die Berechtigungsabfragen am Mac. **Let Him Use the Computer** ist für neue Installationen standardmäßig aus. Die geerbten Aktionen brauchen Accessibility; Screenshots brauchen Screen Recording. Ein Doppeltipp auf dem Handy startet/stoppt eine Sitzung; gedrückt halten stellt eine Frage. ⌃⌥S stoppt Computeraktionen.
+
+## Entwicklung und Tests
+
+```sh
+swift test
+```
+
+Tests prüfen Anfragegrenzen, optionalen Kontext, API-Antwortparsing und fehlende Schlüssel ohne Netzwerkzugriff. Ein erfolgreicher Build bestätigt noch keinen echten Modellaufruf oder eine funktionierende iPhone-Verbindung.
+
+Siehe [Produktplan](docs/PRODUCT.md) für die nächsten sinnvollen Schritte.
+
+## Herkunft und Lizenz
+
+Upstream: [rbrown101010/bluey-by-riley](https://github.com/rbrown101010/bluey-by-riley). Die ursprüngliche [Unlicense](LICENSE) bleibt erhalten und erlaubt auch kommerzielle Nutzung. Mitgelieferte Schriftarten haben eigene OFL-Lizenzen unter `Shared/Fonts/`. Dienstbedingungen, Marken und neue Abhängigkeiten müssen vor einem kommerziellen Release separat geprüft werden.

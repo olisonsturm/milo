@@ -9,13 +9,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let server = PhoneServer()
     private var statusItem: NSStatusItem!
     private lazy var host = RealtimeHost(overlay: overlay)
+    private let assistantPanel = AssistantPanel()
 
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Fonts.registerBundled()
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.image = MenuIcon.make()
-        statusItem.button?.toolTip = "Bluey"
+        statusItem.button?.toolTip = "Milo"
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -23,7 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         overlay.onFace = { [weak self] face in self?.server.send(face) }
         overlay.start()
         showDemoBubbleIfAsked()
-        checkPermissions()
+        // Standalone chat does not need screen or Accessibility permissions.
+        assistantPanel.show()
         if let path = ProcessInfo.processInfo.environment["GOOGLY_DEMO_TRANSCRIBE"], let audio = FileManager.default.contents(atPath: path) {
             // Transcribes an audio file into a throwaway notes folder, prints the lines and quits.
             Task {
@@ -57,16 +59,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌃⌥S stops him using the computer right away.
         HotKeys.shared.register(keyCode: kVK_ANSI_S) { [weak self] in self?.stopActions() }
 
-        if Keychain.get(.openai) == nil {
+        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", Keychain.get(.openai) == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editKeys() }
         }
     }
 
     private func refreshIcon() {
-        statusItem.button?.appearsDisabled = server.phoneNames.isEmpty
+        statusItem.button?.appearsDisabled = false
     }
 
     // MARK: Actions
+
+    @objc private func openAssistant() { assistantPanel.show() }
 
     @objc private func pointHere() {
         let m = NSEvent.mouseLocation
@@ -144,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             try? text.write(to: status, atomically: true, encoding: .utf8)
         }.fire()
     }
+
+    @objc private func enableScreenAccess() { checkPermissions() }
 
     @objc private func openNotes() {
         try? FileManager.default.createDirectory(at: MeetingNotes.root, withIntermediateDirectories: true)
@@ -225,6 +231,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        menu.addItem(item("Milo öffnen…", #selector(openAssistant)))
+        menu.addItem(item("Bildschirmzugriff aktivieren…", #selector(enableScreenAccess)))
+        menu.addItem(.separator())
         let phones = server.phoneNames
         let status = NSMenuItem(title: phones.isEmpty ? "Waiting for the phone app…" : "Phone connected: \(phones.joined(separator: ", "))",
                                 action: nil, keyEquivalent: "")
@@ -305,7 +314,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(show)
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Bluey", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Milo", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     /// Menu item that shows its global shortcut (⌃⌥ + key) when given one.

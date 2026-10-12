@@ -1,6 +1,6 @@
 name: GooglyEyes
 options:
-  bundleIdPrefix: co.visionairy.googly
+  bundleIdPrefix: dev.milo.assistant
   deploymentTarget:
     iOS: "17.0"
 settings:
@@ -17,17 +17,17 @@ targets:
       - path: Shared
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: co.visionairy.googly.phone
-        PRODUCT_NAME: Bluey
+        PRODUCT_BUNDLE_IDENTIFIER: dev.milo.assistant.phone
+        PRODUCT_NAME: Milo
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: NF73NSV867
+        DEVELOPMENT_TEAM: ""
         # Set your team in Xcode (Signing & Capabilities) the first time you run it.
     info:
       path: iOS/Info.plist
       properties:
-        CFBundleDisplayName: Bluey
+        CFBundleDisplayName: Milo
         UILaunchScreen: {}
         UIRequiresFullScreen: true
         UIStatusBarHidden: true
@@ -35,7 +35,7 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        NSLocalNetworkUsageDescription: Bluey finds the Mac app on your Wi-Fi so the character can look where it points.
+        NSLocalNetworkUsageDescription: Milo finds the Mac app on your Wi-Fi so the character can look where it points.
         NSMicrophoneUsageDescription: Talk to your blueberry. He listens while he's awake (double tap him to wake him up or put him to sleep).
         NSBonjourServices:
           - _googly._tcp
