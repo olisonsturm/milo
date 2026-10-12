@@ -9,6 +9,7 @@ enum LLMSettingsEditor {
         alert.informativeText = "Wähle den Dienst für den Mac-Chat. Anfragen und aktiv geteilter Kontext gehen an diese URL. Der Handy-Sprachmodus nutzt weiterhin OpenAI."
         let form = LLMSettingsForm(configuration: .current)
         alert.accessoryView = form
+        alert.window.initialFirstResponder = form.keyEntry.field
         alert.addButton(withTitle: "Speichern")
         alert.addButton(withTitle: "Abbrechen")
         while alert.runModal() == .alertFirstButtonReturn {
@@ -47,7 +48,13 @@ private final class LLMSettingsForm: NSView {
     }
 
     init(configuration: LLMConfiguration) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 510, height: 352))
+        super.init(frame: NSRect(x: 0, y: 0, width: 510, height: 392))
+        let keyStatus = NSTextField(labelWithString: configuration.key == nil
+            ? "Für den aktuellen Endpoint ist kein API-Key gespeichert."
+            : "Für den aktuellen Endpoint ist ein API-Key gespeichert.")
+        keyStatus.frame = NSRect(x: 0, y: 316, width: 500, height: 24)
+        keyStatus.textColor = configuration.key == nil ? .systemOrange : .secondaryLabelColor
+        addSubview(keyStatus)
         for (text, y) in [("API-Format", 278), ("Base URL", 236), ("Modell", 194), ("API-Key", 148)] {
             let label = NSTextField(labelWithString: text)
             label.frame = NSRect(x: 0, y: y, width: 120, height: 22)
@@ -60,11 +67,13 @@ private final class LLMSettingsForm: NSView {
         model.placeholderString = "Exakter Modellname aus deinem Proxy"
         keyEntry.frame.origin = NSPoint(x: 130, y: 104)
         keyEntry.field.frame.size.width = 360
-        keyEntry.field.placeholderString = "Optional lokal; leer lässt gespeicherten Key unverändert"
+        keyEntry.field.placeholderString = configuration.key == nil
+            ? "Hier den Key dieses Proxys einfügen"
+            : "Key gespeichert; neuen Key zum Ersetzen einfügen"
         removeKey.frame = NSRect(x: 130, y: 74, width: 375, height: 24)
         for view in [format, base, model, keyEntry, removeKey] { addSubview(view) }
         let preset = NSButton(title: "Lokaler Claude-Proxy :6655", target: self, action: #selector(useLocalProxy))
-        preset.frame = NSRect(x: 0, y: 316, width: 250, height: 30)
+        preset.frame = NSRect(x: 0, y: 356, width: 250, height: 30)
         preset.bezelStyle = .rounded
         addSubview(preset)
         let help = NSTextField(wrappingLabelWithString: "Root-URLs ergänzen /v1 und den API-Pfad. Alternativ die vollständige Endpoint-URL eintragen. Proxy-Keys werden pro Endpoint gespeichert; OpenAI-Keys werden nicht an deinen Proxy weitergereicht.")
@@ -79,7 +88,7 @@ private final class LLMSettingsForm: NSView {
     @objc private func useLocalProxy() {
         format.selectItem(at: LLMFormat.allCases.firstIndex(of: .claude)!)
         base.stringValue = "http://localhost:6655/anthropic/v1"
-        model.stringValue = "claude-sonnet-4-6"
+        model.stringValue = "anthropic--claude-4.6-sonnet"
         keyEntry.field.stringValue = ""
         removeKey.state = .off
     }

@@ -60,8 +60,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // ⌃⌥S stops him using the computer right away.
         HotKeys.shared.register(keyCode: kVK_ANSI_S) { [weak self] in self?.stopActions() }
 
-        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", LLMConfiguration.current.isDirectOpenAI, Keychain.get(.openai) == nil {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editKeys() }
+        if ProcessInfo.processInfo.environment["MILO_SKIP_KEY_PROMPT"] != "1", LLMConfiguration.current.key == nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.editLLMSettings() }
         }
     }
 

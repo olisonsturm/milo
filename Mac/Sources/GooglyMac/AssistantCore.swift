@@ -79,7 +79,7 @@ enum AssistantCore {
         case noKey, http(Int), quota, rateLimit, unknown429, configuration, invalidReply
         var errorDescription: String? {
             switch self {
-            case .noKey: return "Bitte hinterlege unter LLM-Einstellungen einen API-Key. Die Vorschau funktioniert ohne Key."
+            case .noKey: return "Für diesen LLM-Endpoint ist kein API-Key gespeichert. Öffne LLM-Einstellungen… und füge den Key dieses Dienstes ein. Der separate OpenAI-Key gilt nicht für deinen Proxy."
             case .http(401): return "Der LLM-Dienst lehnt den API-Key ab oder verlangt einen Key. Hinterlege den passenden Key unter LLM-Einstellungen."
             case .http(404): return "API-Endpoint oder Modell nicht gefunden (HTTP 404). Prüfe Base URL, API-Format und Modellnamen."
             case .http(let code): return "Anfrage fehlgeschlagen (HTTP \(code)). Prüfe API-Key, API-Guthaben und Verbindung."
@@ -185,6 +185,7 @@ enum AssistantCore {
         defer { session.invalidateAndCancel() }
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if status == 401 && key?.isEmpty != false { throw Failure.noKey }
         guard status == 200 else { throw failure(status: status, data: data) }
         return try parseReply(data, format: configuration.format)
     }

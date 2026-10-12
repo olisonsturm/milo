@@ -23,7 +23,7 @@ Unter **LLM-Einstellungen…** auf **Lokaler Claude-Proxy :6655** klicken:
 
 - API-Format: **Claude Messages**
 - Base URL: `http://localhost:6655/anthropic/v1`
-- Modell: `claude-sonnet-4-6` (oder ein anderes vom Proxy angebotenes Modell)
+- Modell: `anthropic--claude-4.6-sonnet` (oder ein anderes vom Proxy angebotenes Modell)
 - API-Key: der **Hai-Proxy-Key**, nicht der OpenAI-Key
 
 Milo sendet an `/anthropic/v1/messages` mit `Authorization: Bearer …` und `anthropic-version`. Der Dienst muss laufen. API-Keys werden pro Endpoint gespeichert und bei URL-Wechsel nicht automatisch übernommen. Das leere Key-Feld behält einen gespeicherten Key; zum Entfernen die Checkbox aktivieren. Lokale Proxys ohne Authentifizierung dürfen das Feld leer lassen; der Hai-Proxy verlangt einen Key.
